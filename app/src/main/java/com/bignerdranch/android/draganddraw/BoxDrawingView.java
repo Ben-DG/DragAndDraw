@@ -2,11 +2,16 @@ package com.bignerdranch.android.draganddraw;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PointF;
+import android.hardware.SensorManager;
+import android.os.Bundle;
+import android.os.Parcelable;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.MotionEvent;
+import android.view.OrientationEventListener;
 import android.view.View;
 
 import java.util.ArrayList;
@@ -15,10 +20,16 @@ import java.util.List;
 public class BoxDrawingView extends View {
     private static final String TAG = "BoxDrawingView";
 
+    private static final String EXTRA_SUPER = "EXTRA_SUPER";
+    private static final String EXTRA_BOXEN = "EXTRA_BOXEN";
+
     private Box mCurrentBox;
     private List<Box> mBoxen = new ArrayList<>();
     private Paint mBoxPaint;
     private Paint mBackgroundPaint;
+    OrientationEventListener mOrientationEventListener;
+    private int mCurrentOrientation;
+
 
     // Used when creating the view in code
     public BoxDrawingView(Context context) {
@@ -36,12 +47,45 @@ public class BoxDrawingView extends View {
         // Paint the background off-white
         mBackgroundPaint = new Paint();
         mBackgroundPaint.setColor(0xfff8efe0);
+
+        mOrientationEventListener =
+                new OrientationEventListener(getContext(),SensorManager.SENSOR_DELAY_NORMAL)
+        {
+            @Override
+            public void onOrientationChanged (int orientation)
+            {
+                mCurrentOrientation =  (90 * Math.round(orientation / 90)) % 360;
+            }
+        };
+
+        if(mOrientationEventListener.canDetectOrientation())
+        {
+            mOrientationEventListener.enable();
+        }
+    }
+
+    @Override
+    protected Parcelable onSaveInstanceState() {
+        Bundle bundle = new Bundle();
+        bundle.putParcelable(EXTRA_SUPER, super.onSaveInstanceState());
+        bundle.putParcelableArrayList(EXTRA_BOXEN, (ArrayList<Box>) mBoxen);
+
+        return bundle;
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Parcelable state) {
+        Bundle bundle = (Bundle) state;
+        mBoxen = bundle.getParcelableArrayList(EXTRA_BOXEN);
+        super.onRestoreInstanceState(bundle.getParcelable(EXTRA_SUPER));
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         // Fill the background
         canvas.drawPaint(mBackgroundPaint);
+
+        rotateBoxen();
 
         for (Box box : mBoxen) {
             float left = Math.min(box.getOrigin().x, box.getCurrent().x);
@@ -62,7 +106,7 @@ public class BoxDrawingView extends View {
             case MotionEvent.ACTION_DOWN:
                 action = "ACTION_DOWN";
                 // Reset drawing state
-                mCurrentBox = new Box(current);
+                mCurrentBox = new Box(current, mCurrentOrientation);
                 mBoxen.add(mCurrentBox);
                 break;
             case MotionEvent.ACTION_MOVE:
@@ -84,5 +128,23 @@ public class BoxDrawingView extends View {
         Log.i(TAG, action + " at x=" + current.x + ", y=" + current.y);
 
         return true;
+    }
+
+    public void clearBoxen() {
+        mBoxen.clear();
+        invalidate();
+    }
+
+    private void rotateBoxen() {
+        for (Box box : mBoxen) {
+            int rotation = box.getOrientation() - mCurrentOrientation;
+            box.setOrientation(mCurrentOrientation);
+            rotateBox(box, rotation);
+        }
+    }
+
+    private void rotateBox(Box box, int rotation) {
+        Matrix m = new Matrix();
+        m.setRotate(rotation);
     }
 }
