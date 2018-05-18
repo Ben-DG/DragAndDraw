@@ -74,7 +74,13 @@ public class BoxDrawingView extends View {
             float top = Math.min(box.getOrigin().y, box.getCurrent().y);
             float bottom = Math.max(box.getOrigin().y, box.getCurrent().y);
 
+            // Calculate the center of the rectangle
+            float px = ( box.getCurrent().x + box.getOrigin().x ) / 2;
+            float py = ( box.getCurrent().y + box.getOrigin().y ) / 2;
+
+            canvas.rotate(box.getAngle(), px, py); // box.getAngle()
             canvas.drawRect(left, top, right, bottom, mBoxPaint);
+            canvas.rotate( -1 * box.getAngle(), px, py );
         }
     }
 
@@ -83,23 +89,49 @@ public class BoxDrawingView extends View {
         PointF current = new PointF(event.getX(), event.getY());
         String action = "";
 
-        switch (event.getAction()) {
+        switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 action = "ACTION_DOWN";
                 // Reset drawing state
                 mCurrentBox = new Box(current);
+                mCurrentBox.setId(event.getPointerId(0));
                 mBoxen.add(mCurrentBox);
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if ((event.getPointerCount() >= 2) && (mCurrentBox != null)) {
+                    // 2nd finger detected
+                    PointF current2 = new PointF(event.getX(1), event.getY(1));
+                    mCurrentBox.setOrigin2(current2);
+                    mCurrentBox.setId2(event.getPointerId(1));
+                }
                 break;
             case MotionEvent.ACTION_MOVE:
                 action = "ACTION_MOVE";
-                if (mCurrentBox != null) {
+                // Update rectangle coordinates
+                if ((mCurrentBox != null) && (mCurrentBox.getId() == event.getPointerId(0))) {
                     mCurrentBox.setCurrent(current);
+                    // 2nd finger
+                    if (event.getPointerCount() >= 2) {
+                        if (mCurrentBox.getId2() == event.getPointerId(1)) {
+                            // 2nd finger detected
+                            PointF current2 = new PointF(event.getX(1), event.getY(1));
+                            mCurrentBox.setCurrent2(current2);
+                            // Angle calculation
+                            mCurrentBox.setAngle(calcAngle(mCurrentBox.getOrigin2(), mCurrentBox.getCurrent2()));
+                        }
+                    }
                     invalidate();
                 }
                 break;
             case MotionEvent.ACTION_UP:
                 action = "ACTION_UP";
                 mCurrentBox = null;
+                break;
+            case MotionEvent.ACTION_POINTER_UP:
+                action = "ACTION_POINTER_UP";
+                if (mCurrentBox != null) {
+                    Log.i(TAG, "Angle = " + mCurrentBox.getAngle());
+                }
                 break;
             case MotionEvent.ACTION_CANCEL:
                 action = "ACTION_CANCEL";
@@ -114,5 +146,21 @@ public class BoxDrawingView extends View {
     public void clearBoxen() {
         mBoxen.clear();
         invalidate();
+    }
+
+    /**
+     *  The angle between the vertical segment from the center point and the segment
+     *  from center to target0 and 360 degrees are North
+     */
+    public float calcAngle(PointF center, PointF target) {
+        float angle = (float) Math.atan2(target.y - center.y, target.x - center.x);
+        angle += Math.PI/2.0;
+        // Translate to degrees
+        angle = (float) Math.toDegrees(angle);
+
+        if(angle < 0){
+            angle += 360;
+        }
+        return angle;
     }
 }
