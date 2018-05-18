@@ -22,6 +22,7 @@ public class BoxDrawingView extends View {
 
     private static final String EXTRA_SUPER = "EXTRA_SUPER";
     private static final String EXTRA_BOXEN = "EXTRA_BOXEN";
+    private static final String EXTRA_ORIENTATION = "EXTRA_ORIENTATION";
 
     private Box mCurrentBox;
     private List<Box> mBoxen = new ArrayList<>();
@@ -29,6 +30,7 @@ public class BoxDrawingView extends View {
     private Paint mBackgroundPaint;
     OrientationEventListener mOrientationEventListener;
     private int mCurrentOrientation;
+    private boolean hasRotated = false;
 
 
     // Used when creating the view in code
@@ -69,6 +71,7 @@ public class BoxDrawingView extends View {
         Bundle bundle = new Bundle();
         bundle.putParcelable(EXTRA_SUPER, super.onSaveInstanceState());
         bundle.putParcelableArrayList(EXTRA_BOXEN, (ArrayList<Box>) mBoxen);
+        bundle.putInt(EXTRA_ORIENTATION, mCurrentOrientation);
 
         return bundle;
     }
@@ -77,7 +80,9 @@ public class BoxDrawingView extends View {
     protected void onRestoreInstanceState(Parcelable state) {
         Bundle bundle = (Bundle) state;
         mBoxen = bundle.getParcelableArrayList(EXTRA_BOXEN);
+        mCurrentOrientation = bundle.getInt(EXTRA_ORIENTATION);
         super.onRestoreInstanceState(bundle.getParcelable(EXTRA_SUPER));
+        hasRotated = true; // better way to detect a screen rotation based view change?
     }
 
     @Override
@@ -85,7 +90,10 @@ public class BoxDrawingView extends View {
         // Fill the background
         canvas.drawPaint(mBackgroundPaint);
 
-        rotateBoxen();
+        if (hasRotated) { // So that this method isn't called every time we call invalidate()
+            rotateBoxen();
+            hasRotated = !hasRotated;
+        }
 
         for (Box box : mBoxen) {
             float left = Math.min(box.getOrigin().x, box.getCurrent().x);
@@ -106,7 +114,8 @@ public class BoxDrawingView extends View {
             case MotionEvent.ACTION_DOWN:
                 action = "ACTION_DOWN";
                 // Reset drawing state
-                mCurrentBox = new Box(current, mCurrentOrientation);
+                mCurrentBox = new Box(current, mCurrentOrientation, this.getWidth(),
+                        this.getHeight());
                 mBoxen.add(mCurrentBox);
                 break;
             case MotionEvent.ACTION_MOVE:
@@ -140,11 +149,35 @@ public class BoxDrawingView extends View {
             int rotation = box.getOrientation() - mCurrentOrientation;
             box.setOrientation(mCurrentOrientation);
             rotateBox(box, rotation);
+            box.setScreenWidth(this.getWidth());
+            box.setScreenHeight(this.getHeight());
         }
     }
 
     private void rotateBox(Box box, int rotation) {
-        Matrix m = new Matrix();
-        m.setRotate(rotation);
+        PointF origin = box.getOrigin();
+        PointF current = box.getCurrent();
+
+        switch (rotation) {
+            case -270:
+            case 90:
+                origin.set(origin.y, box.getScreenWidth() - origin.x);
+                current.set(current.y, box.getScreenWidth() - current.x);
+                break;
+            case 270:
+            case -90:
+                origin.set(box.getScreenHeight() - origin.y, origin.x);
+                current.set(box.getScreenHeight() - current.y, current.x);
+                break;
+            case 180:
+                origin.set(box.getScreenWidth() - origin.x, box.getScreenHeight() - origin.y);
+                current.set(box.getScreenWidth() - current.x, box.getScreenHeight() - current.y);
+                break;
+            default:
+                break;
+        }
+
+        box.setOrigin(origin);
+        box.setCurrent(current);
     }
 }
